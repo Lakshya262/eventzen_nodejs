@@ -8,23 +8,31 @@ const { errorHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
 
-// CORS configuration
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
-  exposedHeaders: ["Authorization", "X-New-Token"] 
-}));
+// ✅ Correct CORS Setup
+const allowedOrigins = [process.env.CORS_ORIGIN || "http://localhost:5173"];
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-csrf-token"],
+    exposedHeaders: ["Authorization", "X-New-Token"],
+  })
+);
 
-// Body parser middleware
+// ✅ Middleware Order: CORS → Body Parsers
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Security headers middleware
+// ✅ Security Headers Middleware
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Credentials", "true");
-  // Security headers
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("X-XSS-Protection", "1; mode=block");
@@ -33,11 +41,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// API routes
+// ✅ API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 
-// Health check endpoint
+// ✅ Health Check Endpoint
 app.get("/api/health", async (req, res) => {
   try {
     await sequelize.authenticate();
@@ -45,63 +53,59 @@ app.get("/api/health", async (req, res) => {
       status: "healthy",
       timestamp: new Date().toISOString(),
       database: "connected",
-      uptime: process.uptime()
+      uptime: process.uptime(),
     });
   } catch (error) {
-    res.status(503).json({ // Using 503 for service unavailable
+    res.status(503).json({
       status: "unhealthy",
       timestamp: new Date().toISOString(),
       database: "disconnected",
-      error: error.message
+      error: error.message,
     });
   }
 });
 
-// 404 handler for unmatched routes
-app.use((req, res, next) => {
+// ✅ 404 Handler for Unmatched Routes
+app.use((req, res) => {
   res.status(404).json({
     error: "Not Found",
-    message: `Route ${req.originalUrl} not found`
+    message: `Route ${req.originalUrl} not found`,
   });
 });
 
-// Error handling middleware (must be last)
+// ✅ Error Handling Middleware (Must Be Last)
 app.use(errorHandler);
 
-// Database connection and server startup
+// ✅ Database Connection & Server Startup
 const startServer = async () => {
   try {
-    // Test database connection
     await sequelize.authenticate();
     console.log("✅ Database connected");
 
-    // Sync models
     await sequelize.sync({
-      force: process.env.NODE_ENV === "test", 
-      alter: process.env.NODE_ENV === "development" 
-      
+      force: false, // ⛔ Avoid using force in production
+      alter: process.env.NODE_ENV === "development",
     });
     console.log("✅ Database synced");
 
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     });
 
-    // Graceful shutdown handler
+    // ✅ Graceful Shutdown
     const shutdown = async (signal) => {
       console.log(`\nReceived ${signal}, shutting down gracefully...`);
       try {
         await sequelize.close();
         console.log("✅ Database connection closed");
-        
+
         server.close(() => {
           console.log("✅ Server closed");
           process.exit(0);
         });
-        
-        // Force shutdown if hanging
+
         setTimeout(() => {
           console.error("⚠️ Forcing shutdown after timeout");
           process.exit(1);
@@ -112,27 +116,22 @@ const startServer = async () => {
       }
     };
 
-    // Handle shutdown signals
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
-    
-    // Handle uncaught exceptions
     process.on("uncaughtException", (err) => {
       console.error("⚠️ Uncaught Exception:", err);
       shutdown("uncaughtException");
     });
-    
-    // Handle unhandled rejections
     process.on("unhandledRejection", (reason, promise) => {
       console.error("⚠️ Unhandled Rejection at:", promise, "reason:", reason);
       shutdown("unhandledRejection");
     });
-    
+
   } catch (err) {
     console.error("❌ Server startup failed:", err);
     process.exit(1);
   }
 };
 
-// Start the server
+// ✅ Start the Server
 startServer();
