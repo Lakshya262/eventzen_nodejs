@@ -51,6 +51,7 @@ exports.getAllEvents = async (req, res) => {
   try {
     const events = await Event.findAll({
       where: {
+        deletedAt: null, // Ensure we only get events that are not deleted
         date_time: { [Op.gte]: new Date() }
       },
       order: [['date_time', 'ASC']]
@@ -76,6 +77,7 @@ exports.bookEvent = async (req, res) => {
   try {
     const { eventId } = req.body;
     const userId = req.user.id;
+    console.log(`User ID: ${userId}, Event ID: ${eventId}`); // Log user ID and event ID
     
     // Validate input
     if (!eventId) {
@@ -86,7 +88,12 @@ exports.bookEvent = async (req, res) => {
       });
     }
 
-    const event = await Event.findByPk(eventId);
+    const event = await Event.findOne({
+      where: {
+        id: eventId,
+        deletedAt: null // Ensure we only get events that are not deleted
+      }
+    });
     
     if (!event) {
       return res.status(404).json({ 
@@ -152,6 +159,8 @@ exports.getEventBookings = async (req, res) => {
       });
     }
 
+    console.log(`Fetching bookings for event ID: ${req.params.eventId}`); // Log the event ID being queried
+
     const bookings = await Booking.findAll({
       where: { eventId: req.params.eventId },
       include: [{
@@ -161,6 +170,8 @@ exports.getEventBookings = async (req, res) => {
       }],
       order: [['booking_date', 'DESC']]
     });
+
+    console.log(`Bookings found: ${JSON.stringify(bookings)}`); // Log the bookings retrieved
 
     res.json({
       success: true,
