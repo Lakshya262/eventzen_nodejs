@@ -40,4 +40,12 @@ console.log("Authorization header:", req.headers.authorization);
     }
 });
 
-module.exports = { protect };
+const admin = asyncHandler(async (req, res, next) => {
+    if (req.user.role !== 'ADMIN') {
+        res.status(403);
+        throw new Error('Not authorized as admin');
+    }
+    next();
+});
+
+module.exports = { protect, admin };
